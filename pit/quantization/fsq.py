@@ -12,7 +12,6 @@ class FSQQuantizer(nn.Module):
     # FSQQuantizer
     # follow the Appendix A.1 of FSQ paper
     # in https://arxiv.org/pdf/2309.15505
-    # only operates with z \in [-1, +1]
 
     # args
     # levels: the FSQ levels parameter, see Table 1 of FSQ paper
@@ -32,7 +31,6 @@ class FSQQuantizer(nn.Module):
         half_l = (self.levels - 1) * (1 + eps) / 2
         offset = torch.where(self.levels % 2 == 0, 0.5, 0.0)
         shift = (offset / half_l).atanh()
-        print(zhat.shape, shift.shape, half_l.shape, offset.shape)
         bounded_z = (zhat + shift).tanh() * half_l - offset
 
         half_width = self.levels // 2

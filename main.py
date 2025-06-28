@@ -606,7 +606,7 @@ if __name__ == "__main__":
 
         ckpt_resume_path = opt.resume_from_checkpoint
 
-        if not "devices" in trainer_config and trainer_config["accelerator"] != "gpu":
+        if "devices" not in trainer_config and trainer_config["accelerator"] != "gpu":
             del trainer_config["accelerator"]
             cpu = True
         else:
@@ -772,7 +772,7 @@ if __name__ == "__main__":
         trainer_kwargs["callbacks"] = [
             instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg
         ]
-        if not "plugins" in trainer_kwargs:
+        if "plugins" not in trainer_kwargs:
             trainer_kwargs["plugins"] = list()
 
         # cmd line trainer args (which are in trainer_opt) have always priority over config-trainer-args (which are in trainer_kwargs)
@@ -868,14 +868,12 @@ if __name__ == "__main__":
             import os
             import socket
 
-            import requests
 
             device = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
             hostname = socket.gethostname()
             ts = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            resp = requests.get("http://169.254.169.254/latest/meta-data/instance-id")
             print(
-                f"ERROR at {ts} on {hostname}/{resp.text} (CUDA_VISIBLE_DEVICES={device}): {type(err).__name__}: {err}",
+                f"ERROR at {ts} on {hostname}/(CUDA_VISIBLE_DEVICES={device}): {type(err).__name__}: {err}",
                 flush=True,
             )
         raise err

@@ -53,7 +53,7 @@ class GeneralLPIPSWithDiscriminator(nn.Module):
         discriminator_config = default(
             discriminator_config,
             {
-                "target": "sgm.modules.autoencoding.lpips.model.model.NLayerDiscriminator",
+                "target": "pit.modules.lpips.model.model.NLayerDiscriminator",
                 "params": {
                     "input_nc": disc_in_channels,
                     "n_layers": disc_num_layers,
