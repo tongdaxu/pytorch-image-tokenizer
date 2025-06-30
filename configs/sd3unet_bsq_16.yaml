@@ -13,7 +13,6 @@ model:
     
         regularization_weights:
           entropy_aux_loss: 0.1
-          commit_loss: 0.025
 
         additional_log_keys: null
 
@@ -26,11 +25,11 @@ model:
             use_actnorm: True
 
     regularizer_config:
-      target: pit.quantization.lfq.LFQQuantizer
+      target: pit.quantization.bsq.BSQQuantizer
       params:
         format: bchw
-        codebook_size: 256
-        num_codebooks: 2
+        codebook_size: 2
+        num_codebooks: 16
     
     encoder_config:
       target: pit.modules.unet.Encoder

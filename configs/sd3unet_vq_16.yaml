@@ -1,8 +1,9 @@
 model:
-  base_learning_rate: 4e-5
+  base_learning_rate: 4e-4
   target: pit.models.autoencoder.AutoencodingEngine
   params:
     input_key: img
+
     loss_config:
       target: pit.modules.losses.discriminator_loss.GeneralLPIPSWithDiscriminator
       params:
@@ -12,8 +13,7 @@ model:
         learn_logvar: True
     
         regularization_weights:
-          entropy_aux_loss: 0.1
-          commit_loss: 0.025
+          codebook_loss: 1.0
 
         additional_log_keys: null
 
@@ -26,11 +26,11 @@ model:
             use_actnorm: True
 
     regularizer_config:
-      target: pit.quantization.lfq.LFQQuantizer
+      target: pit.quantization.vq.VQQuantizer
       params:
         format: bchw
-        codebook_size: 256
-        num_codebooks: 2
+        n: 65536
+        dim: 4
     
     encoder_config:
       target: pit.modules.unet.Encoder
@@ -89,7 +89,7 @@ data:
   target: pit.data.ImageDataModuleFromConfig
   params:
     num_workers: 16
-    batch_size: 16
+    batch_size: 8
 
     train:
       target: pit.data.SimpleDataset

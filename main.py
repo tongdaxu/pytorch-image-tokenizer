@@ -496,7 +496,6 @@ def init_wandb(save_dir, opt, config, group_name, name_str):
 
 
 if __name__ == "__main__":
-
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
 
     # add cwd for convenience and to make classes in this file available when
@@ -867,7 +866,6 @@ if __name__ == "__main__":
             import datetime
             import os
             import socket
-
 
             device = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
             hostname = socket.gethostname()

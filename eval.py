@@ -22,9 +22,11 @@ from pit.evaluations.ssim import get_ssim_and_msssim
 from pit.evaluations.fid.inception import InceptionV3
 from pit.data import SimpleDataset
 
+
 def print_dict(dict_stat):
     for key in dict_stat.keys():
         print("{0} -- mean: {1:.4f}".format(key, np.mean(dict_stat[key])))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -161,7 +163,6 @@ if __name__ == "__main__":
             """
 
         if local_rank == 0:
-
             for j in range(world_size):
                 all_psnr[j] = torch.cat(all_psnr[j], dim=0).numpy()
             all_psnr_reorg = []

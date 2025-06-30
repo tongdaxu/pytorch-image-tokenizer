@@ -10,14 +10,10 @@ from torch.nn import Module
 
 from einops import rearrange, reduce
 
-# constants
-
-LossBreakdown = namedtuple('LossBreakdown', ['per_sample_entropy', 'codebook_entropy', 'commitment', 'avg_probs'])
-
-# helper functions
 
 def exists(v):
     return v is not None
+
 
 def default(*args):
     for arg in args:
@@ -25,10 +21,10 @@ def default(*args):
             return arg() if callable(arg) else arg
     return None
 
+
 def entropy(prob):
     return (-prob * torch.log(prob + 1e-5)).sum(dim=-1)
 
-# class
 
 def mult_along_first_dims(x, y):
     """
@@ -38,6 +34,7 @@ def mult_along_first_dims(x, y):
     for _ in range(ndim_to_expand):
         y = y.unsqueeze(-1)
     return x * y
+
 
 def masked_mean(x, m):
     """
@@ -55,9 +52,9 @@ def masked_mean(x, m):
     x = x / m.sum()
     return x.sum(tuple(range(m.ndim)))
 
-def entropy_loss(
+
+def lfq_entropy_loss(
     logits,
-    mask=None,
     temperature=0.01,
     sample_minimization_weight=1.0,
     batch_maximization_weight=1.0,
@@ -72,25 +69,16 @@ def entropy_loss(
     LANGUAGE MODEL BEATS DIFFUSION — TOKENIZER IS KEY TO VISUAL GENERATION (2024)
     """
     probs = F.softmax(logits / temperature, -1)
+
     log_probs = F.log_softmax(logits / temperature + eps, -1)
 
-    if mask is not None:
-        # avg_probs = probs[mask].mean(tuple(range(probs.ndim - 1)))
-        # avg_probs = einx.mean("... D -> D", probs[mask])
-
-        avg_probs = masked_mean(probs, mask)
-        # avg_probs = einx.mean("... D -> D", avg_probs)
-    else:
-        avg_probs = reduce(probs, "... D -> D", "mean")
+    avg_probs = reduce(probs, "... D -> D", "mean")
 
     avg_entropy = -torch.sum(avg_probs * torch.log(avg_probs + eps))
 
     sample_entropy = -torch.sum(probs * log_probs, -1)
-    if mask is not None:
-        # sample_entropy = sample_entropy[mask].mean()
-        sample_entropy = masked_mean(sample_entropy, mask).mean()
-    else:
-        sample_entropy = torch.mean(sample_entropy)
+
+    sample_entropy = torch.mean(sample_entropy)
 
     loss = (sample_minimization_weight * sample_entropy) - (
         batch_maximization_weight * avg_entropy
@@ -98,13 +86,13 @@ def entropy_loss(
 
     return sample_entropy, avg_entropy, loss
 
+
 class LFQQuantizer(Module):
     def __init__(
         self,
         format,
-        dim = None,
-        codebook_size = None,
-        num_codebooks = 1,
+        codebook_size=None,
+        num_codebooks=1,
         sample_minimization_weight=1.0,
         batch_maximization_weight=1.0,
     ):
@@ -113,37 +101,26 @@ class LFQQuantizer(Module):
         self.format = format
         assert self.format in ["bchw", "blc"]
 
-        # some assert validations
-        assert exists(dim) or exists(codebook_size), 'either dim or codebook_size must be specified for LFQ'
-        assert not exists(codebook_size) or log2(codebook_size).is_integer(), f'your codebook size must be a power of 2 for lookup free quantization (suggested {2 ** ceil(log2(codebook_size))})'
-
-        self.codebook_size = default(codebook_size, lambda: 2 ** dim)
+        self.codebook_size = codebook_size
         self.codebook_dim = int(log2(codebook_size))
-
-        codebook_dims = self.codebook_dim * num_codebooks
-        dim = default(dim, codebook_dims)
-
-        has_projections = dim != codebook_dims
-        self.has_projections = has_projections
-
-        self.dim = dim
-        self.codebook_dim = self.codebook_dim
         self.num_codebooks = num_codebooks
-        
+
         # for entropy loss
         self.sample_minimization_weight = sample_minimization_weight
         self.batch_maximization_weight = batch_maximization_weight
 
         # for no auxiliary loss, during inference
-        self.register_buffer('mask', 2 ** torch.arange(self.codebook_dim), persistent=False)
-        self.register_buffer('zero', torch.tensor(0.), persistent = False)
+        self.register_buffer(
+            "mask", 2 ** torch.arange(self.codebook_dim), persistent=False
+        )
+        self.register_buffer("zero", torch.tensor(0.0), persistent=False)
 
         # codes
         all_codes = torch.arange(codebook_size)
         bits = self.indices_to_bits(all_codes)
         codebook = bits * 2.0 - 1.0
-        self.register_buffer('codebook', codebook, persistent = False)
-    
+        self.register_buffer("codebook", codebook, persistent=False)
+
     def indices_to_bits(self, x):
         """
         x: long tensor of indices
@@ -154,14 +131,13 @@ class LFQQuantizer(Module):
         # x is now big endian bits, the last dimension being the bits
         x = (x.unsqueeze(-1) & mask) != 0
         return x
-    
+
     def dequant(self, x):
         return x
 
     def forward(
         self,
         x,
-        mask = None,
     ):
         """
         einstein notation
@@ -179,20 +155,22 @@ class LFQQuantizer(Module):
             b, l, c = x.shape
             ndim = l * c
 
-        x = rearrange(x, 'b n (c d) -> b n c d', c = self.num_codebooks)
+        x = rearrange(x, "b n (c d) -> b n c d", c=self.num_codebooks)
 
         codebook_value = torch.Tensor([1.0]).to(device=x.device, dtype=x.dtype)
-        quantized = torch.where(x > 0, codebook_value, -codebook_value) # higher than 0 filled 
+        quantized = torch.where(
+            x > 0, codebook_value, -codebook_value
+        )  # higher than 0 filled
 
         # entropy aux loss
 
         if self.training:
-            logits = 2 * einsum('... i d, j d -> ... i j', x, self.codebook)
+            logits = 2 * einsum("... i d, j d -> ... i j", x, self.codebook)
             # the same as euclidean distance up to a constant
-            per_sample_entropy, codebook_entropy, entropy_aux_loss = entropy_loss(
-                logits = logits,
-                sample_minimization_weight = self.sample_minimization_weight,
-                batch_maximization_weight = self.batch_maximization_weight
+            per_sample_entropy, codebook_entropy, entropy_aux_loss = lfq_entropy_loss(
+                logits=logits,
+                sample_minimization_weight=self.sample_minimization_weight,
+                batch_maximization_weight=self.batch_maximization_weight,
             )
             avg_probs = self.zero
         else:
@@ -205,19 +183,18 @@ class LFQQuantizer(Module):
         # commit loss
 
         if self.training:
-            commit_loss = F.mse_loss(x, quantized.detach(), reduction = 'none')
+            commit_loss = F.mse_loss(x, quantized.detach(), reduction="none")
             commit_loss = commit_loss.mean()
         else:
             commit_loss = self.zero
 
-
         # use straight-through gradients (optionally with custom activation fn) if training
 
-        quantized = x + (quantized - x).detach() #transfer to quantized
+        quantized = x + (quantized - x).detach()  # transfer to quantized
 
         # merge back codebook dim
 
-        quantized = rearrange(quantized, 'b n c d -> b n (c d)')
+        quantized = rearrange(quantized, "b n c d -> b n (c d)")
 
         # reconstitute image or video dimensions
 
@@ -232,17 +209,21 @@ class LFQQuantizer(Module):
         }
         return quantized, info
 
+
 if __name__ == "__main__":
     quantizer = LFQQuantizer(
-    format = "bchw",
-    codebook_size = 2**8,      # codebook size, must be a power of 2
-    dim = 8,                   # this is the input feature dimension, defaults to log2(codebook_size) if not defined
-    num_codebooks = 2,
-    sample_minimization_weight = 1.0,        # within entropy loss, how much weight to give to diversity of codes, taken from https://arxiv.org/abs/1911.05894
-    batch_maximization_weight = 1.0
-)
+        format="bchw",
+        codebook_size=2**8,  # codebook size, must be a power of 2
+        num_codebooks=2,
+        sample_minimization_weight=1.0,  # within entropy loss, how much weight to give to diversity of codes, taken from https://arxiv.org/abs/1911.05894
+        batch_maximization_weight=1.0,
+    )
 
-    image_feats = torch.randn(2, 16, 16, 16) #16 is dim, must be power of 2 of codebook_size
+    image_feats = torch.randn(
+        2, 16, 32, 32
+    )  # 16 is dim, must be power of 2 of codebook_size
 
-    quantized, info = quantizer(image_feats)  # you may want to experiment with temperature
+    quantized, info = quantizer(
+        image_feats
+    )  # you may want to experiment with temperature
     print("quantized shape:", quantized.shape)
