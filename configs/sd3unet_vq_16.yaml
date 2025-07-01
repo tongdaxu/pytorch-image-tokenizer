@@ -30,7 +30,7 @@ model:
       params:
         format: bchw
         n: 65536
-        dim: 4
+        dim: 16
     
     encoder_config:
       target: pit.modules.unet.Encoder

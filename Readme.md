@@ -59,7 +59,6 @@
 
 | spec          | config                  | model                    | PSNR  | SSIM  | LPIPS | rFID  |
 |---------------|-------------------------|--------------------------|-------|-------|-------|-------|
-| VQ 2^16x1024  | sd3unet_vq_16.yaml     | sd3unet_vq_16.ckpt       |23.90| 0.683 | 0.112 | 1.961 |
 | LFQ 2^16x1024 | sd3unet_lfq_16.yaml     | sd3unet_lfq_16.ckpt      | 22.65 | 0.635 | 0.141 | 3.523 |
 | FSQ 2^16x1024 | sd3unet_fsq_16.yaml | sd3unet_fsq_16.ckpt  | 26.87 | 0.785 | 0.072 | 1.161 |
 | BSQ 2^16x1024 | sd3unet_bsq_16.yaml     | sd3unet_bsq_16.ckpt      | 25.62 | 0.754 | 0.086 | 1.080 |
